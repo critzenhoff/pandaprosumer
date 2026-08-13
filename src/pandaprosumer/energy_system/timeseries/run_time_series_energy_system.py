@@ -37,6 +37,17 @@ def run_loop(energy_system, ts_variables, run_control_fct=run_control, output_wr
         if "transient" in kwargs:
             kwargs["simulation_time_step"] = i
         run_time_step(energy_system, time_step, ts_variables, run_control_fct, output_writer_fct, **kwargs)
+        first_key = next(iter(energy_system.nets))
+        net = energy_system.nets[first_key]
+        net.res_heat_consumer["real_q"] = net.res_heat_consumer["mdot_from_kg_per_s"] * net.res_heat_consumer["deltat_k"] * 4180
+
+        print(net.res_heat_consumer.head())
+
+        print(
+            net.res_heat_consumer[
+                ["t_from_k", "t_to_k", "mdot_from_kg_per_s"]
+            ].head()
+        )
 
 
 def run_timeseries(energy_system, period_index, continue_on_divergence=False, verbose=True, **kwargs):

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 from pandaprosumer.element.element_toolbox import enforce_types
 

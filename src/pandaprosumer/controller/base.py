@@ -30,7 +30,6 @@ class BasicProsumerController(MappedController):
     """
 
     def name_class(self):
-        """Return the controller class identifier used in results and logging."""
         return "basic_controller"
 
     def __init__(self, container, basic_prosumer_object, order=0, level=0, in_service=True, index=None,
@@ -40,7 +39,6 @@ class BasicProsumerController(MappedController):
         """
         super().__init__(container, basic_prosumer_object, order, level, in_service, index,
                          drop_same_existing_ctrl, overwrite, name, matching_params, **kwargs)
-        self.last_result = {}
 
     def control_step(self, prosumer):
         """
@@ -236,5 +234,4 @@ class BasicProsumerController(MappedController):
         return tfeed_res_c, treturn_res_c, mdot_tab_kg_per_s
 
     def is_supervisor(self):
-        """Return True if this controller is a Supervisor instance (overridden by Supervisor)."""
         return False

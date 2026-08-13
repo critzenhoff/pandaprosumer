@@ -1,5 +1,5 @@
 from typing import List
-from .rule import Rule
+from .rule import *
 
 
 class CombiningRules:

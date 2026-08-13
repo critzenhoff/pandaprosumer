@@ -20,7 +20,6 @@ class HeatDemandElementData:
     name: str = 'heat_demand'
     input: List[tuple] = field(default_factory=lambda: [
         ('name', dtype(object)),
-        ('t_feed_demand_c', 'f8'),
-        ('t_return_demand_c', 'f8'),
+        ('scaling', 'f8'),
         ('in_service', 'bool')
     ])

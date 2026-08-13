@@ -7,13 +7,14 @@ import pandas as pd
 from pandapipes.timeseries.run_time_series import pf_not_converged
 from pandapower.timeseries.run_time_series import controller_not_converged, finalize_step, output_writer_routine
 
+import pandaprosumer as ppros
 from pandapipes.multinet.control.run_control_multinet import prepare_ctrl_variables_for_net, _evaluate_multinet, \
     net_initialization_multinet
 from pandapower.control.run_control import control_initialization, \
     control_finalization, \
     control_implementation, get_controller_order, NetCalculationNotConverged, ControllerNotConverged
 from pandaprosumer.run_control import prepare_run_ctrl as prepare_run_ctrl_ppros
-from pandaprosumer.pandaprosumer_container import pandaprosumerContainer
+from pandaprosumer.pandaprosumer_container import pandaprosumerContainer, get_default_prosumer_container_structure
 
 try:
     import pandaplan.core.pplog as logging
