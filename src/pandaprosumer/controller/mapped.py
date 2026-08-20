@@ -311,18 +311,32 @@ class MappedController(Controller):
         # Boolean mask for objects where no_chain is False
         mask_no_chain = ~container.mapping["object"].apply(lambda r: r.no_chain)
 
+        # CARL + 13
+        mask_same_container = container.mapping["object"].apply(lambda r: r.responder_net is container)
+
         # Apply masks, sort, and select columns
         filtered_mapping = (
-            container.mapping[mask_responder & mask_no_chain]
+            container.mapping[mask_responder & mask_no_chain & mask_same_container]  # & mask_same_container
             .sort_values("order")
             [["object", "initiator"]]
         )
 
-        # Build the list of initiators
         list_initiators = [
-            obj.responder_net.controller.loc[initiator]["object"]
+            container.controller.loc[initiator]["object"]  # container statt obj.responder_net!
             for obj, initiator in filtered_mapping.itertuples(index=False)
         ]
+        # # Apply masks, sort, and select columns
+        # filtered_mapping = (
+        #     container.mapping[mask_responder & mask_no_chain]
+        #     .sort_values("order")
+        #     [["object", "initiator"]]
+        # )
+        #
+        # # Build the list of initiators
+        # list_initiators = [
+        #     obj.responder_net.controller.loc[initiator]["object"]
+        #     for obj, initiator in filtered_mapping.itertuples(index=False)
+        # ]
 
         if remove_duplicate:
             return list(dict.fromkeys(list_initiators))

@@ -384,16 +384,32 @@ class StratifiedHeatStorageController(BasicProsumerController):
             mdot_charge_kg_per_s = min(mdot_charge_kg_per_s, float(max_charge_mdot))
 
         mdot_required_kg_per_s = mdot_demand_kg_per_s + mdot_charge_kg_per_s
-        if mdot_required_kg_per_s == 0:
+        if not self.bypass:
+            # bypass=False: Lade- und Entladekreis sind hydraulisch komplett entkoppelt
+            # (siehe _calculate_heat_storage: mdot_bypass_kg_per_s = 0). Der Rücklauf
+            # zur HP ist deshalb IMMER exakt die aktuelle Bodenschicht-Temperatur,
+            # unabhängig von mdot_demand/mdot_charge. Eine Mischung mit t_demand_in_c
+            # würde einen Wert versprechen, der nie eintritt -> ständiger Reapply.
+            t_required_out_c = t_charge_out_c
+        elif mdot_required_kg_per_s == 0:
             t_required_out_c = t_required_in_c
         else:
             t_required_out_c = (mdot_demand_kg_per_s * t_demand_in_c + mdot_charge_kg_per_s * t_charge_out_c) / mdot_required_kg_per_s
 
         if not np.isnan(self.t_previous_out_charge_c):
-            mdot_charge_kg_per_s = mdot_demand_kg_per_s * (t_demand_in_c - t_required_out_c) / (t_required_out_c - t_charge_out_c)
-            return self.t_previous_in_charge_c, self.t_previous_out_charge_c, mdot_charge_kg_per_s
+            return self.t_previous_in_charge_c, self.t_previous_out_charge_c, self.mdot_previous_in_kg_per_s
 
         return t_required_in_c, t_required_out_c, mdot_required_kg_per_s
+        # if mdot_required_kg_per_s == 0:
+        #     t_required_out_c = t_required_in_c
+        # else:
+        #     t_required_out_c = (mdot_demand_kg_per_s * t_demand_in_c + mdot_charge_kg_per_s * t_charge_out_c) / mdot_required_kg_per_s
+        #
+        # if not np.isnan(self.t_previous_out_charge_c):
+        #     mdot_charge_kg_per_s = mdot_demand_kg_per_s * (t_demand_in_c - t_required_out_c) / (t_required_out_c - t_charge_out_c)
+        #     return self.t_previous_in_charge_c, self.t_previous_out_charge_c, mdot_charge_kg_per_s
+        #
+        # return t_required_in_c, t_required_out_c, mdot_required_kg_per_s
 
     @property
     def _t_charge_out(self):
@@ -610,6 +626,9 @@ class StratifiedHeatStorageController(BasicProsumerController):
         t_demand_out_c, t_demand_in_c, mdot_demand_tab_kg_per_s = self.t_m_to_deliver(prosumer)
         mdot_demand_kg_per_s = sum(mdot_demand_tab_kg_per_s)
 
+        print(f"SHS: {t_demand_out_c, t_demand_in_c, mdot_demand_kg_per_s}")
+        print(f"SHS received: {self._t_received_in_c, self._mdot_received_kg_per_s}")
+
         assert mdot_demand_kg_per_s >= 0, f"SHS {self.name} mdot_demand_kg_per_s is negative ({mdot_demand_kg_per_s}) for timestep {self.time} in prosumer {prosumer.name}"
         assert t_demand_out_c >= t_demand_in_c, f"SHS {self.name} t_demand_out_c < t_demand_in_c is negative ({t_demand_out_c} < {t_demand_in_c}) for timestep {self.time} in prosumer {prosumer.name}"
         assert t_demand_in_c >= 0, f"SHS {self.name} t_demand_in_c is negative ({t_demand_in_c}) for timestep {self.time} in prosumer {prosumer.name}"
@@ -738,6 +757,6 @@ class StratifiedHeatStorageController(BasicProsumerController):
             self._unapply_initiators(prosumer)
             self.t_previous_out_charge_c = t_received_out_c
             self.t_previous_in_charge_c = t_received_in_c
-            self.mdot_previous_in_kg_per_s = mdot_delivered_kg_per_s
+            self.mdot_previous_in_kg_per_s = mdot_received_kg_per_s  # mdot_delivered_kg_per_s CARL
             self.input_mass_flow_with_temp = {FluidMixMapping.TEMPERATURE_KEY: np.nan,
                                               FluidMixMapping.MASS_FLOW_KEY: np.nan}
