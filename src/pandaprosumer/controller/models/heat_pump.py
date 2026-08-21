@@ -67,6 +67,18 @@ class HeatPumpController(BasicProsumerController):
         else:
             return np.nan
 
+    @property
+    def _t_cond_out_user_c(self): # CARL + 9
+        """
+        User-defined condenser outlet (feed) temperature, provided via GenericMapping.
+        Returns NaN if 't_cond_out_c' is not among the input columns of this controller,
+        or if no value is mapped for the current timestep -> in that case the
+        demand-driven value from t_m_to_deliver() is used instead (unchanged behavior).
+        """
+        if "t_cond_out_c" not in self.input_columns:
+            return np.nan
+        return self._get_input("t_cond_out_c")
+
     def _t_m_to_receive_init(self, prosumer):
         """
         Return the expected received Feed temperature, return temperature and mass flow in °C and kg/s
@@ -180,7 +192,8 @@ class HeatPumpController(BasicProsumerController):
         q_cond_kw = mdot_cond_kg_per_s * cp_cond_kj_per_kgk * (t_cond_out_c - t_cond_in_c)
 
         # 2. Calculate temp_out_evap in °C
-        t_evap_out_c = t_evap_in_c - self._get_element_param(prosumer, 'delta_t_evap_c')
+        delta_t_evap_nom_c = self._get_element_param(prosumer, 'delta_t_evap_c')
+        t_evap_out_c = max(t_evap_in_c - delta_t_evap_nom_c, 1) # Todo: Hardcoded t_min
         cp_evap_kj_per_kgk = self.evap_fluid.get_heat_capacity(CELSIUS_TO_K + (t_evap_in_c + t_evap_out_c) / 2) / 1000
 
         # Heat pump is off whenever the required temperature lift is non-positive:
@@ -240,7 +253,37 @@ class HeatPumpController(BasicProsumerController):
         q_evap_kw = q_cond_kw - p_comp_kw
 
         # 7. Calculate mass flow of evaporator m_evap
-        mdot_evap_kg_per_s = q_evap_kw / (cp_evap_kj_per_kgk * abs(t_evap_out_c - t_evap_in_c))
+        # mdot_evap_kg_per_s = q_evap_kw / (cp_evap_kj_per_kgk * abs(t_evap_out_c - t_evap_in_c))
+        # CARL +15
+        # 7. Calculate mass flow of evaporator m_evap
+        if t_evap_in_c > t_evap_out_c:
+            mdot_evap_kg_per_s = q_evap_kw / (cp_evap_kj_per_kgk * abs(t_evap_out_c - t_evap_in_c))
+            mdot_evap_max_kg_per_s = q_evap_kw / (
+                        cp_evap_kj_per_kgk * delta_t_evap_nom_c)
+
+            if mdot_evap_max_kg_per_s < mdot_evap_kg_per_s - 1e-9:
+                # Source too cold for the nominal delta_t_evap_c: the mass flow that could
+                # physically be extracted at delta_t_evap_c is lower than what the actual
+                # (clamped) delta_t would imply -> p_comp/q_cond must be reduced accordingly.
+                # Done ONCE here (no recursive re-entry into this branch, since t_evap_in_c/
+                # t_evap_out_c/cop_hp stay unchanged -> no divergence risk).
+                q_evap_kw = mdot_evap_max_kg_per_s * cp_evap_kj_per_kgk * abs(t_evap_out_c - t_evap_in_c)
+                p_comp_kw = q_evap_kw / (cop_hp - 1)
+                q_cond_kw = q_evap_kw + p_comp_kw
+                mdot_cond_kg_per_s = p_comp_kw * cop_hp / (cp_cond_kj_per_kgk * (t_cond_out_c - t_cond_in_c))
+                mdot_evap_kg_per_s = mdot_evap_max_kg_per_s
+            else:
+                mdot_evap_kg_per_s = min(mdot_evap_kg_per_s, mdot_evap_max_kg_per_s)
+        else:
+            # Safety net: should be unreachable, since the shutdown check earlier in this
+            # method already returns before reaching this point whenever
+            # t_evap_in_c <= t_evap_out_c. Kept here in case that guard is ever changed,
+            # so the HP is forced fully off (same tuple shape as the primary shutdown path)
+            # instead of dividing by a zero/negative delta.
+            return (0, 0, 0, 0,
+                    mdot_cond_kg_per_s, t_cond_in_c, t_cond_in_c,
+                    0, t_evap_in_c, t_evap_in_c)
+
 
         # 8. Check parameters
         max_cop = self._get_element_param(prosumer, 'max_cop')
@@ -432,9 +475,11 @@ class HeatPumpController(BasicProsumerController):
         t_cond_out_required_c, t_cond_in_required_c, mdot_tab_required_kg_per_s = self.t_m_to_deliver(prosumer)
         mdot_cond_required_kg_per_s = np.sum(mdot_tab_required_kg_per_s)
 
-        print(self.time)
-        print(f"HP: {t_cond_out_required_c, t_cond_in_required_c, mdot_cond_required_kg_per_s}")
-
+        # NEU: Nutzerdefinierter Kondensator-Sollwert hat Vorrang vor dem aus der
+        # Bedarfskette (t_m_to_deliver) abgeleiteten Wert.
+        t_cond_out_user_c = self._t_cond_out_user_c
+        if not np.isnan(t_cond_out_user_c):
+            t_cond_out_required_c = t_cond_out_user_c
 
         assert not np.isnan(mdot_cond_required_kg_per_s), f"Heat Pump {self.name} mdot_cond_required_kg_per_s is NaN for timestep {self.time} in prosumer {prosumer.name}"
         assert not np.isnan(t_cond_out_required_c), f"Heat Pump {self.name} t_cond_out_required_c is NaN for timestep {self.time} in prosumer {prosumer.name}"
