@@ -626,9 +626,6 @@ class StratifiedHeatStorageController(BasicProsumerController):
         t_demand_out_c, t_demand_in_c, mdot_demand_tab_kg_per_s = self.t_m_to_deliver(prosumer)
         mdot_demand_kg_per_s = sum(mdot_demand_tab_kg_per_s)
 
-        print(f"SHS: {t_demand_out_c, t_demand_in_c, mdot_demand_kg_per_s}")
-        print(f"SHS received: {self._t_received_in_c, self._mdot_received_kg_per_s}")
-
         assert mdot_demand_kg_per_s >= 0, f"SHS {self.name} mdot_demand_kg_per_s is negative ({mdot_demand_kg_per_s}) for timestep {self.time} in prosumer {prosumer.name}"
         assert t_demand_out_c >= t_demand_in_c, f"SHS {self.name} t_demand_out_c < t_demand_in_c is negative ({t_demand_out_c} < {t_demand_in_c}) for timestep {self.time} in prosumer {prosumer.name}"
         assert t_demand_in_c >= 0, f"SHS {self.name} t_demand_in_c is negative ({t_demand_in_c}) for timestep {self.time} in prosumer {prosumer.name}"
