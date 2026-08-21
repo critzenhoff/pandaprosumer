@@ -198,13 +198,27 @@ class ElectricBoilerController(BasicProsumerController):
         t_out_required_c, t_in_required_c, mdot_tab_required_kg_per_s = self.t_m_to_deliver(prosumer)
         mdot_required_kg_per_s = np.sum(mdot_tab_required_kg_per_s)
 
-        print(f"EB: {t_out_required_c, t_in_required_c, mdot_required_kg_per_s}")
-
-
         assert not np.isnan(t_out_required_c), f"Electric Boiler {self.name} t_out_required_c is NaN for timestep {self.time} in prosumer {prosumer.name}"
         assert not np.isnan(t_in_required_c), f"Electric Boiler {self.name} t_in_required_c is NaN for timestep {self.time} in prosumer {prosumer.name}"
         assert not np.isnan(mdot_required_kg_per_s).any(), f"Electric Boiler {self.name} mdot_required_kg_per_s is NaN for timestep {self.time} in prosumer {prosumer.name}"
         assert t_out_required_c >= t_in_required_c, f"Electric Boiler {self.name} t_out_required_c is lower than t_in_required_c for timestep {self.time} in prosumer {prosumer.name}"
+
+        # --- NEU: realer Eintritt von einem vorgeschalteten Erzeuger (SHS) ---
+        mdot_received_kg_per_s = self.input_mass_flow_with_temp[FluidMixMapping.MASS_FLOW_KEY]
+        t_received_in_c = self.input_mass_flow_with_temp[FluidMixMapping.TEMPERATURE_KEY]
+        has_upstream_producer = not np.isnan(t_received_in_c)
+
+        if has_upstream_producer:
+            t_in_actual_c = t_received_in_c
+            if not np.isnan(mdot_received_kg_per_s):
+                mdot_required_kg_per_s = mdot_received_kg_per_s
+            # "Boost", nie kühlen: nie ein Ziel unter der bereits ankommenden Temperatur.
+            t_out_required_c = max(t_out_required_c, t_in_actual_c)
+        else:
+            # Kein FluidMixMapping vorgeschaltet: unverändertes altes Verhalten
+            # (physischer Eintritt = angenommene Netzrücklauftemperatur).
+            t_in_actual_c = t_in_required_c
+        # ----------------------------------------------------------------------
 
         rerun = True
         nb_runs = 0
@@ -218,7 +232,7 @@ class ElectricBoilerController(BasicProsumerController):
             q_kw, mdot_delivered_kg_per_s, t_in_c, t_out_c, p_kw = self._calculate_electric_boiler(prosumer,
                                                                                                    mdot_required_kg_per_s,
                                                                                                    t_out_required_c,
-                                                                                                   t_in_required_c)
+                                                                                                   t_in_actual_c)#t_in_required_c)
 
             overflow_strategy = self._get_element_param(prosumer, 'overflow_strategy')
             if overflow_strategy is None or (isinstance(overflow_strategy, float) and np.isnan(overflow_strategy)):
@@ -241,6 +255,10 @@ class ElectricBoilerController(BasicProsumerController):
                     # If this recalculation changes the input temperature, rerun the calculation
                     # with the new temperature
                     t_in_required_c = t_in_new_c
+                    if not has_upstream_producer: #CARL + 4
+                        # Diese Netz-seitige Korrektur nur dann in den physischen Eintritt
+                        # übernehmen, wenn kein Erzeuger vorgeschaltet ist.
+                        t_in_actual_c = t_in_required_c
                     rerun = True
 
         # After merit-order capping, ensure mass and energy balance at the interface:
