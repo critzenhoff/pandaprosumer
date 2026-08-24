@@ -241,6 +241,7 @@ class StratifiedHeatStorageController(BasicProsumerController):
         # Not in the paper nomenclature, is the number of layers
         self.N_l = int(self._get_element_param(prosumer, 'n_layers'))
         t_ext_c = float(self._get_element_param(prosumer, 't_ext_c'))
+        self.t_ext_c = t_ext_c # CARL
 
         if init_layer_temps_c is None:
             self._layer_temps_c = [t_ext_c] * self.N_l
@@ -430,8 +431,8 @@ class StratifiedHeatStorageController(BasicProsumerController):
         # 3.6e6 is the conversion factor from J to kWh
         ret = sum([float(self.fluid.get_density(CELSIUS_TO_K + t_charge_c)) * self.A_m2 *
                    float(self.fluid.get_heat_capacity(CELSIUS_TO_K + t_charge_c)) *
-                   (t_charge_c - self.init_layer_temps_c[z]) * self.dz_m
-                   for z in range(self.N_l) if t_charge_c >= extraction_temp_c - .1]) / 3.6e6
+                   (t_charge_c - self.t_ext_c) * self.dz_m # self.init_layer_temps_c[z]
+                   for z in range(self.N_l) if t_charge_c >= extraction_temp_c - 3]) / 3.6e6
         return ret
 
     def _get_stored_energy_kwh(self, t_extraction_c):
@@ -446,8 +447,8 @@ class StratifiedHeatStorageController(BasicProsumerController):
         # 3.6e6 is the conversion factor from J to kWh
         ret = sum([float(self.fluid.get_density(CELSIUS_TO_K + self._layer_temps_c[z])) * self.A_m2 *
                    float(self.fluid.get_heat_capacity(CELSIUS_TO_K + self._layer_temps_c[z])) *
-                   (self._layer_temps_c[z] - self.init_layer_temps_c[z]) * self.dz_m
-                   for z in range(self.N_l) if self._layer_temps_c[z] >= t_extraction_c - .1]) / 3.6e6
+                   (self._layer_temps_c[z] - self.t_ext_c) * self.dz_m #self.init_layer_temps_c[z]
+                   for z in range(self.N_l) if self._layer_temps_c[z] >= t_extraction_c - 3]) / 3.6e6
         return ret
 
     def _calculate_heat_storage(self, prosumer, mdot_demand_kg_per_s, t_received_in_c, t_demand_out_c, t_demand_in_c,
@@ -607,6 +608,7 @@ class StratifiedHeatStorageController(BasicProsumerController):
             self.applied = True
             return
 
+
         super().control_step(prosumer)
 
         if not self._are_initiators_converged(prosumer):
@@ -615,6 +617,8 @@ class StratifiedHeatStorageController(BasicProsumerController):
             self.input_mass_flow_with_temp = {FluidMixMapping.TEMPERATURE_KEY: np.nan,
                                               FluidMixMapping.MASS_FLOW_KEY: np.nan}
             return
+
+
 
         # The discharge temperature is the one on top of the storage
         # Note that the time step should not be too long compared to the volume of this top layer and the mass flow
@@ -668,12 +672,15 @@ class StratifiedHeatStorageController(BasicProsumerController):
                     # with the new temperature
                     t_demand_in_c = t_return_demand_new_c
                     rerun = True
+        min_useful_temp_c = self._get_element_param(prosumer, 'min_useful_temp_c')
+        e_stored_max_kwh = self._get_max_stored_energy_kwh(min_useful_temp_c, t_demand_out_c)
+        soc = e_stored_kwh / e_stored_max_kwh
 
         result = np.array([[mdot_received_kg_per_s, t_received_in_c, t_received_out_c, q_received_kw,
                             mdot_charge_kg_per_s, t_received_in_c, t_charge_out_c, q_charge_kw,
                             mdot_discharge_kg_per_s, t_demand_in_c, t_discharge_out_c, q_discharge_kw,
                             mdot_delivered_kg_per_s, t_demand_in_c, t_delivered_out_c, q_delivered_kw,
-                            e_stored_kwh]])
+                            e_stored_kwh, soc]])
 
         self.last_result = {
             "mdot_received_kg_per_s": mdot_received_kg_per_s,
@@ -693,6 +700,7 @@ class StratifiedHeatStorageController(BasicProsumerController):
             "t_delivered_out_c": t_delivered_out_c,
             "q_delivered_kw": q_delivered_kw,
             "e_stored_kwh": e_stored_kwh,
+            "soc": soc,
         }
 
         result_fluid_mix = []

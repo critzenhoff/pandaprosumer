@@ -56,5 +56,5 @@ class StratifiedHeatStorageControllerData:
         "mdot_charge_kg_per_s", "t_charge_in_c", "t_charge_out_c", "q_charge_kw",
         "mdot_discharge_kg_per_s", "t_discharge_in_c", "t_discharge_out_c", "q_discharge_kw",
         "mdot_delivered_kg_per_s", "t_delivered_in_c", "t_delivered_out_c", "q_delivered_kw",
-        "e_stored_kwh",
+        "e_stored_kwh", "soc",
     ])
