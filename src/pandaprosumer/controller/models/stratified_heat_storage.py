@@ -122,9 +122,19 @@ def tvd_convection_step(layer_temps_c,
     term_1 = U1_w_per_m2k * S1_m2 * (T_amb - T_1)  # heat losses to the env
     term_2 = (4 / 3) * k_starAoverDz_w_per_k * deltaT[0]  # diffusive terms
     # term_3 = m_cC_p * (T_2 - T_1)                                                    # convective terms
-    term_3 = m_cC_p * (deltaT[0])
-    term_4 = m_dC_p * (T_return - T_1)
+    # CARL + 8
+    if m_eC_p > 0:
+        term_3 = m_eC_p * deltaT[0]  # vorher: m_cC_p * deltaT[0]
+        term_4 = m_dC_p * (T_return - T_1)
+    else:
+        # Entladedominant: keine absteigende Ladefront; das volle m_d deckt
+        # Rücklauf-Eintritt + (HP-Rücklauf + Aufwärtsstrom)-Austritt ab
+        term_3 = 0.
+        term_4 = m_dC_p * (T_return - T_1)
     delta_layer_0 = term_1 + term_2 + term_3 + term_4
+    # term_3 = m_cC_p * (deltaT[0])
+    # term_4 = m_dC_p * (T_return - T_1)
+    # delta_layer_0 = term_1 + term_2 + term_3 + term_4
 
     theta = np.ones_like(T)
     limiter = np.ones_like(T)
@@ -173,16 +183,27 @@ def tvd_convection_step(layer_temps_c,
     # term_2 = (4 / 3) * self.k_starAoverDz * (T_N_minus_1 - T_N)                       # diffusive terms
     term_2 = -(4 / 3) * k_starAoverDz_w_per_k * deltaT[-1]  # diffusive terms
 
+    #CARL + 9
     # convective terms
+    term_3 = m_cC_p * (T_charge - T_N)  # vorher: nur im m_e>0-Zweig, und nur mit m_e statt m_c
     if m_eC_p > 0:
-        term_3 = m_eC_p * (T_charge - T_N)
-        # delta_layer_N_l = timeStep * (term_1 + term_2 + term_3) * self.denominator
+        # Ladedominant: Entnahme (m_d) und Abwärtstransport (m_c - m_d) laufen beide
+        # auf T_N ab und sind in term_3 (volu m_c) enthalten
         delta_layer_N_l = term_1 + term_2 + term_3
     else:
-        # term_4 = m_dC_p * (T_N_minus_1 - T_N)
-        term_4 = -m_dC_p * deltaT[-1]
-        # delta_layer_N_l = timeStep * (term_1 + term_2 + term_4) * self.denominator
-        delta_layer_N_l = term_1 + term_2 + term_4
+        # Entladedominant: Restaufwärtsstrom (m_d - m_c) kommt von der Schicht darunter
+        term_4 = -(m_dC_p - m_cC_p) * deltaT[-1]  # vorher: -m_dC_p * deltaT[-1]
+        delta_layer_N_l = term_1 + term_2 + term_3 + term_4
+    # # convective terms
+    # if m_eC_p > 0:
+    #     term_3 = m_eC_p * (T_charge - T_N)
+    #     # delta_layer_N_l = timeStep * (term_1 + term_2 + term_3) * self.denominator
+    #     delta_layer_N_l = term_1 + term_2 + term_3
+    # else:
+    #     # term_4 = m_dC_p * (T_N_minus_1 - T_N)
+    #     term_4 = -m_dC_p * deltaT[-1]
+    #     # delta_layer_N_l = timeStep * (term_1 + term_2 + term_4) * self.denominator
+    #     delta_layer_N_l = term_1 + term_2 + term_4
     #
     # Assuming layer_temp_deltas is a NumPy array
     new_layer_temp_deltas = np.empty(len(layer_temp_deltas) + 2, dtype=layer_temp_deltas.dtype)

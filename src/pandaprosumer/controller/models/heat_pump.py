@@ -252,6 +252,15 @@ class HeatPumpController(BasicProsumerController):
         # 6. Calculate power of evaporator Q_evap
         q_evap_kw = q_cond_kw - p_comp_kw
 
+        # CARL +6: Cap compressor power BEFORE the delta_t_evap derating, so the
+        # electrical ceiling is derated as well (else min(ask,20MW)*f never <= 20MW*f)
+        max_p_comp_kw = self._get_element_param(prosumer, 'max_p_comp_kw')
+        if not np.isnan(max_p_comp_kw) and p_comp_kw > max_p_comp_kw:
+            p_comp_kw = max_p_comp_kw
+            q_cond_kw = p_comp_kw * cop_hp
+            q_evap_kw = q_cond_kw - p_comp_kw
+            mdot_cond_kg_per_s = q_cond_kw / (cp_cond_kj_per_kgk * (t_cond_out_c - t_cond_in_c))
+
         # 7. Calculate mass flow of evaporator m_evap
         # mdot_evap_kg_per_s = q_evap_kw / (cp_evap_kj_per_kgk * abs(t_evap_out_c - t_evap_in_c))
         # CARL +15
